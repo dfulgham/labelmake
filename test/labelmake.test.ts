@@ -1,10 +1,12 @@
 // import SauceHanSansJP from "./fonts/SauceHanSansJP";
 // import SauceHanSerifJP from "./fonts/SauceHanSerifJP";
-import * as fs from "fs";
-import labelmake from "../src/labelmake";
-const PDFParser = require("pdf2json");
-import templateData from "./templates";
-import { Template } from "../src/type";
+import * as fs from 'fs';
+
+import { Template } from '../src/type';
+import labelmake from '../src/labelmake';
+import templateData from './templates';
+
+const PDFParser = require('pdf2json');
 
 const font: any = {
   SauceHanSansJP: fs.readFileSync(__dirname + `/fonts/SauceHanSansJP.ttf`),
@@ -14,18 +16,18 @@ const font: any = {
 const getPdf = (pdfFilePath: string) => {
   const pdfParser = new PDFParser();
   return new Promise((resolve, reject) => {
-    pdfParser.on("pdfParser_dataError", reject);
-    pdfParser.on("pdfParser_dataReady", resolve);
+    pdfParser.on('pdfParser_dataError', reject);
+    pdfParser.on('pdfParser_dataReady', resolve);
     pdfParser.loadPDF(pdfFilePath);
   });
 };
 
 const getPath = (dir: string, fileName: string) =>
   __dirname + `/${dir}/${fileName}`;
-const getTmpPath = (fileName: string) => getPath("tmp", fileName);
-const getAssertPath = (fileName: string) => getPath("assert", fileName);
+const getTmpPath = (fileName: string) => getPath('tmp', fileName);
+const getAssertPath = (fileName: string) => getPath('assert', fileName);
 
-describe("check validation", () => {
+describe('check validation', () => {
   test(`missing font in template.fontName`, async () => {
     const inputs: { [key: string]: string }[] = [];
     const template: Template = {
@@ -33,7 +35,7 @@ describe("check validation", () => {
       schemas: [
         {
           a: {
-            type: "text",
+            type: 'text',
             position: { x: 0, y: 0 },
             width: 100,
             height: 100,
@@ -46,18 +48,18 @@ describe("check validation", () => {
         fail();
       })
       .catch((e) => {
-        expect(e.message).toEqual("inputs should be more than one length");
+        expect(e.message).toEqual('inputs should be more than one length');
       });
   });
   test(`missing font in template.fontName`, async () => {
-    const inputs = [{ a: "test" }];
+    const inputs = [{ a: 'test' }];
     const template: Template = {
-      fontName: "dummyFont",
+      fontName: 'dummyFont',
       basePdf: { height: 297, width: 210 },
       schemas: [
         {
           a: {
-            type: "text",
+            type: 'text',
             position: { x: 0, y: 0 },
             width: 100,
             height: 100,
@@ -71,26 +73,26 @@ describe("check validation", () => {
       })
       .catch((e) => {
         expect(e.message).toEqual(
-          "dummyFont of template.fontName is not found in font"
+          'dummyFont of template.fontName is not found in font'
         );
       });
   });
   test(`missing font in template.schemas`, async () => {
-    const inputs = [{ a: "test" }];
+    const inputs = [{ a: 'test' }];
     const template: Template = {
-      fontName: "SauceHanSansJP",
+      fontName: 'SauceHanSansJP',
       basePdf: { height: 297, width: 210 },
       schemas: [
         {
           a: {
-            type: "text",
-            fontName: "SauceHanSansJP2",
+            type: 'text',
+            fontName: 'SauceHanSansJP2',
             position: { x: 0, y: 0 },
             width: 100,
             height: 100,
           },
           b: {
-            type: "text",
+            type: 'text',
             position: { x: 0, y: 0 },
             width: 100,
             height: 100,
@@ -104,21 +106,21 @@ describe("check validation", () => {
       })
       .catch((e) => {
         expect(e.message).toEqual(
-          "SauceHanSansJP2 of template.schemas is not found in font"
+          'SauceHanSansJP2 of template.schemas is not found in font'
         );
       });
   });
 });
 
-describe("labelmake integrate test", () => {
+describe('labelmake integrate test', () => {
   afterAll(() => {
-    const dir = __dirname + "/tmp";
+    const dir = __dirname + '/tmp';
     fs.readdir(dir, (err: any, files: any) => {
       if (err) {
         throw err;
       }
       files.forEach((file: any) => {
-        if (file !== ".gitkeep") {
+        if (file !== '.gitkeep') {
           fs.unlink(`${dir}/${file}`, (err: any) => {
             if (err) {
               throw err;
@@ -128,7 +130,7 @@ describe("labelmake integrate test", () => {
       });
     });
   });
-  describe("use labelmake.jp template", () => {
+  describe('use labelmake.jp template', () => {
     const entries = Object.entries(templateData);
     for (let l = 0; l < entries.length; l++) {
       const [key, template] = entries[l];
@@ -148,15 +150,15 @@ describe("labelmake integrate test", () => {
     }
   });
 
-  describe("use nofont template", () => {
+  describe('use nofont template', () => {
     test(`sample`, async () => {
-      const inputs = [{ a: "here is Helvetica" }];
+      const inputs = [{ a: 'here is Helvetica' }];
       const template: Template = {
         basePdf: { height: 297, width: 210 },
         schemas: [
           {
             a: {
-              type: "text",
+              type: 'text',
               position: { x: 0, y: 0 },
               width: 100,
               height: 100,
@@ -173,19 +175,51 @@ describe("labelmake integrate test", () => {
       expect(a).toEqual(e);
     });
 
-    describe("use fontColor template", () => {
+    test(`sample with duplicate variables`, async () => {
+      const inputs = [{ a: 'here is Helvetica' }];
+      const template: Template = {
+        basePdf: { height: 297, width: 210 },
+        schemas: [
+          {
+            a: [
+              {
+                type: 'text',
+                position: { x: 0, y: 0 },
+                width: 100,
+                height: 100,
+              },
+              {
+                type: 'text',
+                position: { x: 40, y: 40 },
+                width: 100,
+                height: 100,
+              },
+            ],
+          },
+        ],
+      };
+      const pdf = await labelmake({ inputs, template });
+      const tmpFile = getTmpPath(`nofont_duplicate.pdf`);
+      const assertFile = getAssertPath(`nofont_duplicate.pdf`);
+      fs.writeFileSync(tmpFile, pdf);
+      const res = await Promise.all([getPdf(tmpFile), getPdf(assertFile)]);
+      const [a, e] = res;
+      expect(a).toEqual(e);
+    });
+
+    describe('use fontColor template', () => {
       test(`sample`, async () => {
-        const inputs = [{ name: "here is purple color" }];
+        const inputs = [{ name: 'here is purple color' }];
         const template: Template = {
           basePdf: { height: 297, width: 210 },
           schemas: [
             {
               name: {
-                type: "text",
+                type: 'text',
                 position: { x: 30, y: 30 },
                 width: 100,
                 height: 20,
-                fontColor: "#7d2ae8",
+                fontColor: '#7d2ae8',
               },
             },
           ],
@@ -200,28 +234,28 @@ describe("labelmake integrate test", () => {
       });
     });
 
-    describe("use fontSubset template", () => {
+    describe('use fontSubset template', () => {
       test(`sample`, async () => {
         const inputs = [
-          { field1: "SauceHanSansJP", field2: "SauceHanSerifJP" },
+          { field1: 'SauceHanSansJP', field2: 'SauceHanSerifJP' },
         ];
         const template: Template = {
           basePdf: { height: 297, width: 210 },
           schemas: [
             {
               field1: {
-                type: "text",
+                type: 'text',
                 position: { x: 30, y: 30 },
                 width: 100,
                 height: 20,
-                fontName: "SauceHanSansJP",
+                fontName: 'SauceHanSansJP',
               },
               field2: {
-                type: "text",
+                type: 'text',
                 position: { x: 60, y: 60 },
                 width: 100,
                 height: 20,
-                fontName: "SauceHanSerifJP",
+                fontName: 'SauceHanSerifJP',
               },
             },
           ],

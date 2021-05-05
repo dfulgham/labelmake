@@ -1,30 +1,33 @@
+import { Args, isPageSize, isSubsetFont } from './type';
 import {
-  PDFFont,
-  PDFImage,
   PDFDocument,
   PDFEmbeddedPage,
-  rgb,
-  degrees,
-  setCharacterSpacing,
+  PDFFont,
+  PDFImage,
   StandardFonts,
   TransformationMatrix,
-} from "pdf-lib";
-import fontkit from "@pdf-lib/fontkit";
-import { createBarCode } from "./barcode";
-import { uniq, hex2rgb, mm2pt, calcX, calcY } from "./util"
-import { Args, isPageSize, isSubsetFont } from "./type";
-import { barcodes } from "./constants"
+  degrees,
+  rgb,
+  setCharacterSpacing,
+} from 'pdf-lib';
+import { calcX, calcY, hex2rgb, mm2pt, uniq } from './util';
 
-
+import { barcodes } from './constants';
+import { createBarCode } from './barcode';
+import fontkit from '@pdf-lib/fontkit';
 
 const labelmake = async ({ inputs, template, font }: Args) => {
   if (inputs.length < 1) {
-    throw Error("inputs should be more than one length");
+    throw Error('inputs should be more than one length');
   }
 
   const fontNamesInSchemas = uniq(
     template.schemas
-      .map((s) => Object.values(s).map((v) => v.fontName))
+      .map((s) =>
+        Object.values(s).map((v) =>
+          !Array.isArray(v) ? v.fontName : uniq(v.map((w) => w.fontName))
+        )
+      )
       .reduce((acc, val) => acc.concat(val), [] as (string | undefined)[])
       .filter(Boolean) as string[]
   );
@@ -51,23 +54,23 @@ const labelmake = async ({ inputs, template, font }: Args) => {
     font && (template.fontName || fontNamesInSchemas.length > 0);
   const fontValues = isUseMyfont
     ? await Promise.all(
-      Object.values(font!).map((v) =>
-        pdfDoc.embedFont(isSubsetFont(v) ? v.data : v, {
-          subset: isSubsetFont(v) ? v.subset : true,
-        })
+        Object.values(font!).map((v) =>
+          pdfDoc.embedFont(isSubsetFont(v) ? v.data : v, {
+            subset: isSubsetFont(v) ? v.subset : true,
+          })
+        )
       )
-    )
     : [];
   const fontObj = isUseMyfont
     ? Object.keys(font!).reduce(
-      (acc, cur, i) => Object.assign(acc, { [cur]: fontValues[i] }),
-      {} as { [key: string]: PDFFont }
-    )
+        (acc, cur, i) => Object.assign(acc, { [cur]: fontValues[i] }),
+        {} as { [key: string]: PDFFont }
+      )
     : {
-      [StandardFonts.Helvetica]: await pdfDoc.embedFont(
-        StandardFonts.Helvetica
-      ),
-    };
+        [StandardFonts.Helvetica]: await pdfDoc.embedFont(
+          StandardFonts.Helvetica
+        ),
+      };
 
   const inputImageCache: { [key: string]: PDFImage } = {};
   const { basePdf, schemas } = template;
@@ -123,113 +126,122 @@ const labelmake = async ({ inputs, template, font }: Args) => {
       if (!schemas[j]) continue;
       for (let l = 0; l < keys.length; l++) {
         const key = keys[l];
-        const schema = schemas[j][key];
+        let _schema = schemas[j][key];
         const input = inputObj[key];
-        if (!schema || !input) continue;
-        const rotate = degrees(schema.rotate ? schema.rotate : 0);
-        const boxWidth = mm2pt(schema.width);
-        const boxHeight = mm2pt(schema.height);
-        if (schema.type === "text") {
-          if (schema.backgroundColor) {
-            const [br, bg, bb] = hex2rgb(schema.backgroundColor);
-            page.drawRectangle({
-              x: calcX(schema.position.x, "left", boxWidth, boxWidth),
+        if (!_schema || !input) continue;
+        if (!Array.isArray(_schema)) {
+          _schema = [_schema];
+        }
+        _schema.forEach(async (schema) => {
+          const rotate = degrees(schema.rotate ? schema.rotate : 0);
+          const boxWidth = mm2pt(schema.width);
+          const boxHeight = mm2pt(schema.height);
+          if (schema.type === 'text') {
+            if (schema.backgroundColor) {
+              const [br, bg, bb] = hex2rgb(schema.backgroundColor);
+              page.drawRectangle({
+                x: calcX(schema.position.x, 'left', boxWidth, boxWidth),
+                y: calcY(schema.position.y, pageHeight, boxHeight),
+                width: boxWidth,
+                height: boxHeight,
+                color: rgb(br / 255, bg / 255, bb / 255),
+              });
+            }
+
+            const fontValue = isUseMyfont
+              ? fontObj[schema.fontName ? schema.fontName : template.fontName!]
+              : fontObj[StandardFonts.Helvetica];
+            const [r, g, b] = hex2rgb(
+              schema.fontColor ? schema.fontColor : '#000'
+            );
+            const fontSize = schema.fontSize ? schema.fontSize : 13;
+            const alignment = schema.alignment ? schema.alignment : 'left';
+            const lineHeight = schema.lineHeight ? schema.lineHeight : 1;
+            const characterSpacing = schema.characterSpacing
+              ? schema.characterSpacing
+              : 0;
+            page.pushOperators(setCharacterSpacing(characterSpacing));
+
+            let beforeLineOver = 0;
+
+            input.split(/\r|\n|\r\n/g).forEach((inputLine, index) => {
+              // TODO UNIT TEST
+              const getSplit = (il: string, stack: string[] = []): string[] => {
+                let skip = false;
+                const splited = il.split('').reduce((acc, cur) => {
+                  const isOver =
+                    fontValue.widthOfTextAtSize(acc + cur, fontSize) +
+                      ((acc + cur).length - 1) * characterSpacing >
+                    boxWidth;
+                  let result = '';
+                  if (isOver || skip) {
+                    skip = true;
+                    result = acc;
+                  } else {
+                    result = acc + cur;
+                  }
+                  return result;
+                }, '');
+                if (splited.length === 0) return stack;
+                const next = stack.concat(splited);
+                const nextLength = next.join('').length;
+                return getSplit(inputLine.substring(nextLength), next);
+              };
+              const splitedLine = getSplit(inputLine);
+              splitedLine.forEach((inputLine2, index2) => {
+                const textWidth =
+                  fontValue.widthOfTextAtSize(inputLine2, fontSize) +
+                  (inputLine2.length - 1) * characterSpacing;
+                page.drawText(inputLine2, {
+                  x: calcX(schema.position.x, alignment, boxWidth, textWidth),
+                  y:
+                    calcY(schema.position.y, pageHeight, fontSize) -
+                    lineHeight * fontSize * (index + index2 + beforeLineOver) -
+                    (lineHeight === 0 ? 0 : ((lineHeight - 1) * fontSize) / 2),
+                  rotate: rotate,
+                  size: fontSize,
+                  lineHeight: lineHeight * fontSize,
+                  maxWidth: boxWidth,
+                  font: fontValue,
+                  color: rgb(r / 255, g / 255, b / 255),
+                  wordBreaks: [''],
+                });
+                if (splitedLine.length === index2 + 1) beforeLineOver += index2;
+              });
+            });
+          } else if (
+            schema.type === 'image' ||
+            barcodes.includes(schema.type)
+          ) {
+            const opt = {
+              x: calcX(schema.position.x, 'left', boxWidth, boxWidth),
               y: calcY(schema.position.y, pageHeight, boxHeight),
+              rotate: rotate,
               width: boxWidth,
               height: boxHeight,
-              color: rgb(br / 255, bg / 255, bb / 255),
-            });
-          }
-
-          const fontValue = isUseMyfont
-            ? fontObj[schema.fontName ? schema.fontName : template.fontName!]
-            : fontObj[StandardFonts.Helvetica];
-          const [r, g, b] = hex2rgb(
-            schema.fontColor ? schema.fontColor : "#000"
-          );
-          const fontSize = schema.fontSize ? schema.fontSize : 13;
-          const alignment = schema.alignment ? schema.alignment : "left";
-          const lineHeight = schema.lineHeight ? schema.lineHeight : 1;
-          const characterSpacing = schema.characterSpacing
-            ? schema.characterSpacing
-            : 0;
-          page.pushOperators(setCharacterSpacing(characterSpacing));
-
-          let beforeLineOver = 0;
-
-          input.split(/\r|\n|\r\n/g).forEach((inputLine, index) => {
-            // TODO UNIT TEST
-            const getSplit = (il: string, stack: string[] = []): string[] => {
-              let skip = false;
-              const splited = il.split("").reduce((acc, cur) => {
-                const isOver =
-                  fontValue.widthOfTextAtSize(acc + cur, fontSize) + (((acc + cur).length - 1) * characterSpacing) > boxWidth;
-                let result = "";
-                if (isOver || skip) {
-                  skip = true;
-                  result = acc;
-                } else {
-                  result = acc + cur;
-                }
-                return result;
-              }, "");
-              if (splited.length === 0) return stack;
-              const next = stack.concat(splited);
-              const nextLength = next.join("").length;
-              return getSplit(inputLine.substring(nextLength), next);
             };
-            const splitedLine = getSplit(inputLine);
-            splitedLine.forEach((inputLine2, index2) => {
-              const textWidth = fontValue.widthOfTextAtSize(
-                inputLine2,
-                fontSize
-              ) + ((inputLine2.length - 1) * characterSpacing);
-              page.drawText(inputLine2, {
-                x: calcX(schema.position.x, alignment, boxWidth, textWidth),
-                y:
-                  calcY(schema.position.y, pageHeight, fontSize) -
-                  lineHeight * fontSize * (index + index2 + beforeLineOver) -
-                  (lineHeight === 0 ? 0 : ((lineHeight - 1) * fontSize) / 2),
-                rotate: rotate,
-                size: fontSize,
-                lineHeight: lineHeight * fontSize,
-                maxWidth: boxWidth,
-                font: fontValue,
-                color: rgb(r / 255, g / 255, b / 255),
-                wordBreaks: [""],
+            const inputImageCacheKey = `${schema.type}${input}`;
+            let image = inputImageCache[inputImageCacheKey];
+            if (!image && schema.type === 'image') {
+              const isPng = input.startsWith('data:image/png;');
+              image = await pdfDoc[isPng ? 'embedPng' : 'embedJpg'](input);
+            } else if (!image && schema.type !== 'image') {
+              const imageBuf = await createBarCode({
+                type: schema.type,
+                width: schema.width,
+                height: schema.height,
+                input,
               });
-              if (splitedLine.length === index2 + 1) beforeLineOver += index2;
-            });
-          });
-        } else if (schema.type === "image" || barcodes.includes(schema.type)) {
-          const opt = {
-            x: calcX(schema.position.x, "left", boxWidth, boxWidth),
-            y: calcY(schema.position.y, pageHeight, boxHeight),
-            rotate: rotate,
-            width: boxWidth,
-            height: boxHeight,
-          };
-          const inputImageCacheKey = `${schema.type}${input}`;
-          let image = inputImageCache[inputImageCacheKey];
-          if (!image && schema.type === "image") {
-            const isPng = input.startsWith("data:image/png;");
-            image = await pdfDoc[isPng ? "embedPng" : "embedJpg"](input);
-          } else if (!image && schema.type !== "image") {
-            const imageBuf = await createBarCode({
-              type: schema.type,
-              width: schema.width,
-              height: schema.height,
-              input,
-            });
-            if (imageBuf) {
-              image = await pdfDoc.embedPng(imageBuf);
+              if (imageBuf) {
+                image = await pdfDoc.embedPng(imageBuf);
+              }
+            }
+            if (image) {
+              inputImageCache[inputImageCacheKey] = image;
+              page.drawImage(image, opt);
             }
           }
-          if (image) {
-            inputImageCache[inputImageCacheKey] = image;
-            page.drawImage(image, opt);
-          }
-        }
+        });
       }
     }
   }

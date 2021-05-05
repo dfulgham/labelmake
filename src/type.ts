@@ -1,18 +1,18 @@
 type TemplateType =
-  | "text"
-  | "image"
-  | "qrcode"
-  | "japanpost"
-  | "ean13"
-  | "ean8"
-  | "code39"
-  | "code128"
-  | "nw7"
-  | "itf14"
-  | "upca"
-  | "upce";
+  | 'text'
+  | 'image'
+  | 'qrcode'
+  | 'japanpost'
+  | 'ean13'
+  | 'ean8'
+  | 'code39'
+  | 'code128'
+  | 'nw7'
+  | 'itf14'
+  | 'upca'
+  | 'upce';
 
-export type BarCodeType = Exclude<TemplateType, "text" | "image">;
+export type BarCodeType = Exclude<TemplateType, 'text' | 'image'>;
 
 export interface TemplateSchema {
   type: TemplateType;
@@ -20,7 +20,7 @@ export interface TemplateSchema {
   width: number;
   height: number;
   rotate?: number;
-  alignment?: "left" | "right" | "center";
+  alignment?: 'left' | 'right' | 'center';
   fontSize?: number;
   fontName?: string;
   fontColor?: string;
@@ -51,14 +51,14 @@ export interface Args {
 
 export const isPageSize = (
   args: PageSize | string | Uint8Array | ArrayBuffer
-): args is PageSize => typeof args === "object" && "width" in args;
+): args is PageSize => typeof args === 'object' && 'width' in args;
 
 export const isSubsetFont = (
   v: string | Uint8Array | ArrayBuffer | SubsetFont
-): v is SubsetFont => typeof v === "object" && !!v && "data" in v;
+): v is SubsetFont => typeof v === 'object' && !!v && 'data' in v;
 
 export interface Template {
-  schemas: { [key: string]: TemplateSchema }[];
+  schemas: { [key: string]: TemplateSchema | TemplateSchema[] }[];
   basePdf: PageSize | string | Uint8Array | ArrayBuffer;
   fontName?: string;
 }
